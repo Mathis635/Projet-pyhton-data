@@ -1,0 +1,20 @@
+---
+title: "Transmission du prix du pétrole aux prix à la pompe en France"
+authors:
+  - Mathis Chartier
+  - Hugues Woto
+lang: fr
+format:
+  html:
+    code-fold: true
+---
+
+## Introduction
+
+## Données
+
+## Analyse descriptive
+
+## Modélisation
+
+## Conclusion

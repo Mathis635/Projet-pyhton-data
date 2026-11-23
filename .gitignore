@@ -1,0 +1,13 @@
+data/
+*.zip
+*.xml
+*.parquet
+.env
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+_site/
+.quarto/
+.DS_Store
+
+**/*.quarto_ipynb
