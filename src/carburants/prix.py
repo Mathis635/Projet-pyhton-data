@@ -12,6 +12,7 @@ import requests
 from lxml import etree
 
 URL_ANNEE = "https://donnees.roulez-eco.fr/opendata/annee/{annee}"
+CARBURANTS_ROUTIERS = ["Gazole", "E10", "SP95", "SP98"]
 RACINE = Path(__file__).resolve().parents[2]  # prix.py -> carburants -> src -> racine
 DOSSIER_BRUT = RACINE / "data" / "raw"
 DOSSIER_INTERMEDIAIRE = RACINE / "data" / "interim"
@@ -95,4 +96,21 @@ def prix_annee(annee: int, dossier_sortie: Path = DOSSIER_INTERMEDIAIRE) -> None
     dossier_sortie.mkdir(parents=True, exist_ok=True)
     typer_stations(stations).to_parquet(dossier_sortie / f"stations_{annee}.parquet")
     typer_prix(prix).to_parquet(dossier_sortie / f"prix_{annee}.parquet")
-    
+
+
+def activite_stations(prix: pd.DataFrame, seuil: int = 50) -> pd.DataFrame:
+    """Nombre de relevés par station et par carburant routier, et indicateur d'activité.
+
+    Une station est active si elle a publié au moins `seuil` relevés de carburants
+    routiers (Gazole, E10, SP95, SP98) dans l'année, soit environ un par semaine.
+    """
+    n = (
+        prix.assign(id_station=prix["id_station"].astype(str))
+        .groupby(["id_station", "carburant"], observed=True)
+        .size()
+        .unstack(fill_value=0)
+        .reindex(columns=CARBURANTS_ROUTIERS, fill_value=0)
+        .add_prefix("releves_")
+    )
+    n["active"] = n.sum(axis=1) >= seuil
+    return n

@@ -2,7 +2,8 @@
 
 Chaîne : requête Overpass (copie figée en JSON) -> table OSM -> normalisation des
 enseignes -> appariement aux stations prix-carburants (identifiant, puis plus
-proche voisin) -> nombre de concurrents d'une autre enseigne dans un rayon donné.
+proche voisin, un pour un) -> activité des stations -> nombre de concurrents
+d'une autre enseigne parmi les stations actives, dans un rayon donné.
 """
 
 import json
@@ -15,13 +16,15 @@ import pandas as pd
 import requests
 from sklearn.neighbors import BallTree
 
+from carburants.prix import activite_stations
+
 URLS_OVERPASS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 ]
 ENTETES_OVERPASS = {
-    "User-Agent": "projet-ensae-carburants/0.1 (mathis.chartier.mail@gmail.com)",
+    "User-Agent": "projet-ensae-carburants/0.1 (+https://github.com/Mathis635/Projet-pyhton-data)",
     "Referer": "https://github.com/Mathis635/Projet-pyhton-data",
 }
 REQUETE_OVERPASS = """
@@ -193,16 +196,24 @@ def n_concurrents(stations: pd.DataFrame, rayon_m: float = 5000) -> pd.Series:
     return pd.Series(n, index=st.index, name="n_concurrents").reindex(stations.index)
 
 
-def stations_enseignes(annee: int, seuil_m: float = 300, rayon_m: float = 5000) -> pd.DataFrame:
-    """Chaîne complète : stations de l'année + enseigne OSM + nombre de concurrents.
+def stations_enseignes(
+    annee: int, seuil_m: float = 300, rayon_m: float = 5000, seuil_activite: int = 50
+) -> pd.DataFrame:
+    """Chaîne complète : stations de l'année + activité + enseigne OSM + concurrents.
 
-    Lit data/interim/stations_{annee}.parquet (produit par prix.prix_annee) et écrit
-    data/interim/stations_enseignes_{annee}.parquet.
+    Lit data/interim/stations_{annee}.parquet et prix_{annee}.parquet (produits par
+    prix.prix_annee) et écrit data/interim/stations_enseignes_{annee}.parquet.
+    Les concurrents ne sont comptés que parmi les stations actives : une station
+    fermée ou sans prix publié ne fait pas concurrence.
     """
     dossier = RACINE / "data" / "interim"
     stations = pd.read_parquet(dossier / f"stations_{annee}.parquet")
+    prix = pd.read_parquet(dossier / f"prix_{annee}.parquet")
     osm = ajouter_enseigne(table_osm(telecharger_osm()))
+
     res = apparier(stations, osm, seuil_m=seuil_m)
-    res["n_concurrents"] = n_concurrents(res, rayon_m=rayon_m)
+    res = res.join(activite_stations(prix, seuil=seuil_activite), on="id_station")
+    res["active"] = res["active"].fillna(False).astype(bool)  # aucun relevé : inactive
+    res["n_concurrents"] = n_concurrents(res[res["active"]], rayon_m=rayon_m)  # NaN si inactive
     res.to_parquet(dossier / f"stations_enseignes_{annee}.parquet")
     return res
