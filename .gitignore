@@ -9,3 +9,6 @@ __pycache__/
 _site/
 .quarto/
 .DS_Store
+
+/.quarto/
+**/*.quarto_ipynb
