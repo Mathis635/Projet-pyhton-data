@@ -13,7 +13,8 @@ DOSSIER_INTERMEDIAIRE = RACINE / "data" / "interim"
 
 
 def filtrer_releves(
-    prix: pd.DataFrame, stations: pd.DataFrame, borne_min: float = 0.5, borne_max: float = 3.0
+    prix: pd.DataFrame, stations: pd.DataFrame, borne_min: float = 0.5, borne_max: float = 3.0,
+    ecart_max: float = 0.25,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Applique les filtres un par un et renvoie (relevés gardés, journal des filtres).
 
@@ -31,6 +32,11 @@ def filtrer_releves(
 
     prix = prix[prix["prix_ttc"].between(borne_min, borne_max)]
     journal.append((f"Prix entre {borne_min} et {borne_max} €/L", len(prix)))
+
+    # Prix aberrant relatif : écart de plus de ecart_max à la médiane nationale du jour
+    mediane = prix.groupby([prix["date_maj"].dt.floor("D"), "carburant"])["prix_ttc"].transform("median")
+    prix = prix[(prix["prix_ttc"] / mediane - 1).abs() <= ecart_max]
+    journal.append((f"Écart à la médiane du jour d'au plus {ecart_max:.0%}", len(prix)))
 
     actives = set(stations.loc[stations["active"], "id_station"].astype(str))
     prix = prix[prix["id_station"].isin(actives)]

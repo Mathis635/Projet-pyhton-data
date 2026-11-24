@@ -212,13 +212,13 @@ def infographie_prix(panel: pd.DataFrame, carburant: str = "Gazole") -> plt.Figu
     """Vue d'ensemble d'un carburant sur l'année, en deux panneaux alignés sur le temps.
 
     Haut : prix moyen entre stations, bande moyenne ± un écart-type, bande D1-D9,
-    prix minimal et maximal du jour, sommet et creux du prix moyen annotés.
+    1er et 99e centiles du jour, sommet et creux du prix moyen annotés.
     Bas : part des stations qui augmentent (au-dessus de zéro) ou baissent
     (en dessous) leur prix ce jour-là.
     """
     d = panel[panel["carburant"] == carburant]
     g = d.groupby("jour")["prix_ttc"]
-    s = pd.DataFrame({"moy": g.mean(), "et": g.std(), "min": g.min(), "max": g.max(),
+    s = pd.DataFrame({"moy": g.mean(), "et": g.std(), "p01": g.quantile(0.01), "p99": g.quantile(0.99),
                       "d1": g.quantile(0.1), "d9": g.quantile(0.9)})
     stations_du_jour = d.groupby("jour").size()
     part_hausse = d[d["variation"] > 0].groupby("jour").size().reindex(s.index, fill_value=0) / stations_du_jour * 100
@@ -232,11 +232,11 @@ def infographie_prix(panel: pd.DataFrame, carburant: str = "Gazole") -> plt.Figu
     haut.fill_between(s.index, s["moy"] - s["et"], s["moy"] + s["et"], color=c, alpha=0.35,
                       label="moyenne ± 1 écart-type")
     haut.plot(s.index, s["moy"], color=c, linewidth=2, label="prix moyen")
-    haut.plot(s.index, s["min"], color=COULEUR_BAISSE, linewidth=0.8, label="prix minimal du jour")
-    haut.plot(s.index, s["max"], color=COULEUR_HAUSSE, linewidth=0.8, label="prix maximal du jour")
+    haut.plot(s.index, s["p01"], color=COULEUR_BAISSE, linewidth=0.8, label="1er centile (1 % les moins chères)")
+    haut.plot(s.index, s["p99"], color=COULEUR_HAUSSE, linewidth=0.8, label="99e centile (1 % les plus chères)")
     for jour, mot in [(s["moy"].idxmax(), "sommet"), (s["moy"].idxmin(), "creux")]:
         haut.annotate(f"{mot} : {s.loc[jour, 'moy']:.3f} €/L\n{jour:%d/%m/%Y}",
-                      xy=(jour, s.loc[jour, "moy"]), xytext=(15, 25 if mot == "creux" else -40),
+                      xy=(jour, s.loc[jour, "moy"]), xytext=(30, 15 if mot == "sommet" else 30),
                       textcoords="offset points", fontsize=8, arrowprops={"arrowstyle": "-", "color": "0.3"})
     haut.set_ylabel("Prix TTC (€/L)")
     haut.set_title(f"{carburant} : prix moyen et dispersion entre stations, jour par jour")
