@@ -1,5 +1,60 @@
 ## Modélisation
 
-<!-- Partie de Hugues : coûts (Brent, taux de change, accise), tests de stationnarité
-et de cointégration, modèle à retards distribués, modèle à correction d'erreur
-asymétrique, test de l'égalité des effets des hausses et des baisses. -->
+### Séries utilisées
+
+Les modèles portent sur 2021 à 2023, pour le gazole et l'E10. Le prix étudié est le prix moyen national hors TVA, remise de l'État réintégrée :
+
+$$p_t = \frac{P^{TTC}_t + R_t}{1{,}2}$$
+
+où $P^{TTC}_t$ est le prix moyen TTC du jour $t$ (€/L) et $R_t$ la remise TTC de l'État ce jour-là. Les stations TotalEnergies sont exclues : leurs remises de 2022 ne passent qu'en partie dans les prix affichés. L'accise est fixe sur la période ; elle disparaît dans les différences et entre dans la constante des relations en niveau.
+
+Le coût $c_t$ est la cotation du produit raffiné à New York (gazole ou essence, en dollars par gallon, source FRED), convertie en €/L avec le taux de change. Le Brent ne suit pas le prix du gazole raffiné en 2022, quand la marge de raffinage a fortement augmenté.
+
+```{python}
+#| label: series-modeles
+from carburants import modeles as mo
+from carburants.couts import construire_table_couts
+
+ANNEES = [2021, 2022, 2023]
+CARBURANTS = ["Gazole", "E10"]
+for a in [2021, 2023]:
+    prix.prix_annee(a)
+    osm.stations_enseignes(a)
+    nettoyage.panel_annee(a)
+
+couts = construire_table_couts("2020-12-01")
+prix_ht = {c: mo.prix_hors_tva(ANNEES, c) for c in CARBURANTS}
+series = {c: mo.serie_nationale(prix_ht[c], mo.cout_produit(c, couts)) for c in CARBURANTS}
+series["Gazole"].head()
+```
+
+### Transmission asymétrique à court terme
+
+$$\Delta p_t = \alpha + \sum_{k=0}^{K}\left(\beta_k^{+}\,\Delta c^{+}_{t-k} + \beta_k^{-}\,\Delta c^{-}_{t-k}\right) + \varepsilon_t, \qquad K = 21$$
+
+$\Delta c^{+}_t = \max(\Delta c_t, 0)$ et $\Delta c^{-}_t = \min(\Delta c_t, 0)$ séparent les hausses et les baisses du coût ; $\beta_k^{\pm}$ est l'effet sur le prix du jour d'une hausse ou d'une baisse survenue $k$ jours plus tôt ; $\varepsilon_t$ est l'erreur. Estimation par moindres carrés ordinaires, écarts-types de Newey-West (robustes à l'autocorrélation et à l'hétéroscédasticité). La transmission cumulée après $k$ jours est $\sum_{j \le k} \beta_j^{\pm}$.
+
+Sur les graphiques, la courbe donne la transmission cumulée estimée $\hat B_k^{\pm} = \hat\beta_0^{\pm} + \dots + \hat\beta_k^{\pm}$ et le couloir coloré son intervalle de confiance à 95 %, $\hat B_k^{\pm} \pm 1{,}96\,\hat\sigma_k$. Les $\hat\beta_j$ étant corrélés, la variance de leur somme est la somme de tous les termes de leur matrice de covariance (Newey-West) :
+
+$$\hat\sigma_k^2 = \sum_{i=0}^{k}\sum_{j=0}^{k}\widehat{\operatorname{Cov}}\big(\hat\beta_i^{\pm}, \hat\beta_j^{\pm}\big)$$
+
+Le couloir s'élargit avec $k$ parce qu'on additionne de plus en plus de coefficients estimés. Quand il contient 1, une transmission complète n'est pas rejetée ce jour-là ; quand les couloirs rouge et bleu se recouvrent, on ne peut pas conclure, à ce jour-là, que hausses et baisses sont transmises différemment. Le test « mêmes coefficients jour par jour » porte sur l'ensemble du profil et peut rejeter l'égalité même quand les couloirs se recouvrent.
+
+```{python}
+#| label: modele-b
+K = 21
+modeles_b = {c: mo.modele_asymetrique(series[c], K) for c in CARBURANTS}
+pd.concat({c: mo.tests_asymetrie(modeles_b[c], K) for c in CARBURANTS})
+```
+
+```{python}
+#| label: fig-transmission-gazole
+#| fig-cap: "Gazole : part d'une hausse et d'une baisse du coût transmise au prix, jour après jour."
+mo.graphique_transmission(modeles_b["Gazole"], K);
+```
+
+```{python}
+#| label: fig-transmission-e10
+#| fig-cap: "E10 : part d'une hausse et d'une baisse du coût transmise au prix, jour après jour."
+mo.graphique_transmission(modeles_b["E10"], K);
+```
