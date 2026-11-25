@@ -7,14 +7,34 @@ lang: fr
 format:
   html:
     code-fold: true
+    toc: true
+    number-sections: true
+execute:
+  warning: false
+  daemon: false
 ---
+
+```{python}
+#| label: setup
+#| include: false
+import pandas as pd
+
+from carburants import descriptif as ds
+from carburants import nettoyage, osm, prix
+from carburants.cartes import carte_types_enseigne
+
+ANNEE = 2022
+pd.set_option("display.precision", 3)
+```
 
 ## Introduction
 
-## Données
+Les prix à la pompe répercutent-ils de la même façon les hausses et les baisses du prix du pétrole ? L'hypothèse dite « rockets and feathers » soutient que les hausses sont transmises plus vite que les baisses. Ce rapport la teste sur les prix quotidiens de toutes les stations-service de France métropolitaine, et regarde si l'asymétrie dépend de la concurrence locale. L'année 2022 sert de cas central : forte hausse au printemps, baisse ensuite, et remises carburant de l'État et de TotalEnergies.
 
-## Analyse descriptive
+{{< include donnees.qmd >}}
 
-## Modélisation
+{{< include descriptif.qmd >}}
+
+{{< include modeles.qmd >}}
 
 ## Conclusion

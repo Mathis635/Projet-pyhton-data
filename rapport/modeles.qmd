@@ -1,0 +1,5 @@
+## Modélisation
+
+<!-- Partie de Hugues : coûts (Brent, taux de change, accise), tests de stationnarité
+et de cointégration, modèle à retards distribués, modèle à correction d'erreur
+asymétrique, test de l'égalité des effets des hausses et des baisses. -->
