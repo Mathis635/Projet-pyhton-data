@@ -1,10 +1,5 @@
-"""Cartes des stations-service (France métropolitaine)."""
-
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-
-# Emprise de la France métropolitaine (degrés)
 LAT_MIN, LAT_MAX, LON_MIN, LON_MAX = 41.0, 51.5, -5.5, 10.0
 COULEURS_TYPE = {
     "grande surface": "tab:green",
@@ -15,7 +10,7 @@ COULEURS_TYPE = {
 }
 
 
-def metropole(stations: pd.DataFrame) -> pd.DataFrame:
+def metropole(stations):
     """Garde les stations dont les coordonnées tombent en France métropolitaine."""
     return stations[
         stations["latitude"].between(LAT_MIN, LAT_MAX)
@@ -23,16 +18,15 @@ def metropole(stations: pd.DataFrame) -> pd.DataFrame:
     ]
 
 
-def preparer_axes(ax: plt.Axes, titre: str) -> None:
+def preparer_axes(ax, titre):
     """Axes nommés, titre, et rapport d'aspect corrigé de la latitude moyenne."""
     ax.set_xlabel("Longitude (°)")
     ax.set_ylabel("Latitude (°)")
     ax.set_title(titre)
-    # 1° de longitude vaut cos(latitude) × 1° de latitude : sans correction la carte est aplatie
     ax.set_aspect(1 / np.cos(np.radians((LAT_MIN + LAT_MAX) / 2)))
 
 
-def carte_types_enseigne(stations: pd.DataFrame) -> plt.Figure:
+def carte_types_enseigne(stations):
     """Stations colorées par type d'enseigne ; l'effectif de chaque type figure en légende."""
     st = metropole(stations)
     fig, ax = plt.subplots(figsize=(8, 8))

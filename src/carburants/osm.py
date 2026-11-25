@@ -1,50 +1,25 @@
-"""Enseigne des stations : appariement avec OpenStreetMap (balise amenity=fuel).
-
-Chaîne : requête Overpass (copie figée en JSON) -> table OSM -> normalisation des
-enseignes -> appariement aux stations prix-carburants (identifiant, puis plus
-proche voisin, un pour un) -> activité des stations -> nombre de concurrents
-d'une autre enseigne parmi les stations actives, dans un rayon donné.
-"""
-
 import json
 import re
-import time
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import requests
 from sklearn.neighbors import BallTree
 
-from carburants.prix import activite_stations
+from carburants.prix import DOSSIER_BRUT, DOSSIER_INTERMEDIAIRE, activite_stations
 
-URLS_OVERPASS = [
-    "https://overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://overpass.private.coffee/api/interpreter",
-]
-ENTETES_OVERPASS = {
-    "User-Agent": "projet-ensae-carburants/0.1 (+https://github.com/Mathis635/Projet-pyhton-data)",
-    "Referer": "https://github.com/Mathis635/Projet-pyhton-data",
-}
-REQUETE_OVERPASS = """
-[out:json][timeout:300];
+RAYON_TERRE = 6_371_000
+REQUETE = """[out:json][timeout:300];
 area["ISO3166-1"="FR"]->.fr;
 nwr["amenity"="fuel"](area.fr);
-out center tags;
-"""
-RACINE = Path(__file__).resolve().parents[2]
-CHEMIN_OSM = RACINE / "data" / "raw" / "osm_stations.json"
-RAYON_TERRE_M = 6_371_000
+out center tags;"""
 
-# Variantes d'écriture rencontrées dans OSM -> enseigne normalisée.
 ENSEIGNES = {
     "TotalEnergies": ["total", "totalenergies", "total access", "elan", "élan"],
     "Leclerc": ["leclerc"],
     "Carrefour": ["carrefour", "proxi"],
     "Intermarché": ["intermarché", "intermarche", "netto", "groupement des mousquetaires"],
-    "Système U": ["systeme u", "système u", "super u", "hyper u", "u express", "u",
-                  "station u", "la station u"],
+    "Système U": ["systeme u", "système u", "super u", "hyper u", "u express", "u", "station u", "la station u"],
     "Auchan": ["auchan"],
     "Casino": ["casino", "géant", "geant", "spar"],
     "Cora": ["cora", "match"],
@@ -63,157 +38,91 @@ ENSEIGNES = {
     "Fulli": ["fulli"],
 }
 GRANDES_SURFACES = {"Leclerc", "Carrefour", "Intermarché", "Système U", "Auchan", "Casino", "Cora"}
-
 MAJORS = {"TotalEnergies", "Esso", "BP", "Shell", "Eni"}
 
 
-def telecharger_osm(chemin: Path = CHEMIN_OSM, essais: int = 3) -> dict:
-    """Interroge Overpass et garde une copie figée du résultat (l'API évolue).
-
-    Essaie plusieurs serveurs publics, avec une pause croissante entre les essais :
-    les serveurs Overpass sont souvent saturés (erreurs 429, 502, 504).
-    """
-    if not chemin.exists():
-        for essai in range(essais):
-            for url in URLS_OVERPASS:
-                try:
-                    reponse = requests.post(
-                        url, data={"data": REQUETE_OVERPASS},
-                        headers=ENTETES_OVERPASS, timeout=360,
-                    )
-                    reponse.raise_for_status()
-                    chemin.parent.mkdir(parents=True, exist_ok=True)
-                    chemin.write_text(reponse.text, encoding="utf-8")
-                    return json.loads(reponse.text)
-                except requests.RequestException as erreur:
-                    print(f"Échec sur {url} : {erreur}")
-            time.sleep(30 * (essai + 1))
-        raise RuntimeError("Aucun serveur Overpass n'a répondu.")
-    return json.loads(chemin.read_text(encoding="utf-8"))
-
-
-def table_osm(donnees: dict) -> pd.DataFrame:
-    """Une ligne par station OSM ; les surfaces (way, relation) sont réduites à leur centre."""
-    lignes = []
-    for el in donnees["elements"]:
-        centre = el.get("center", el)  # un node a lat/lon, un way a center{lat, lon}
-        tags = el.get("tags", {})
-        lignes.append(
-            {
-                "osm_id": f"{el['type']}/{el['id']}",
-                "lat": centre.get("lat"),
-                "lon": centre.get("lon"),
-                "brand": tags.get("brand"),
-                "operator": tags.get("operator"),
-                "name": tags.get("name"),
-                "ref_prix_carburants": tags.get("ref:FR:prix-carburants"),
-            }
-        )
-    return pd.DataFrame(lignes).dropna(subset=["lat", "lon"])
-
-
-def normaliser_enseigne(texte: str | None) -> str | None:
-    """Renvoie l'enseigne normalisée d'un libellé OSM, ou None si inconnue."""
+def enseigne(texte):
+    """Ramène un libellé OSM (« E.Leclerc ») à une enseigne (« Leclerc »), ou None."""
     if not isinstance(texte, str):
         return None
-    t = re.sub(r"[^\w]+", " ", texte.lower()).strip()  # "E.Leclerc" -> "e leclerc"
-    for enseigne, variantes in ENSEIGNES.items():
-        if any(f" {v} " in f" {t} " for v in variantes):  # v présent comme mot entier
-            return enseigne
+    mots = " " + re.sub(r"\W+", " ", texte.lower()).strip() + " "
+    for nom, variantes in ENSEIGNES.items():
+        if any(f" {v} " in mots for v in variantes):
+            return nom
     return None
 
 
-def ajouter_enseigne(osm: pd.DataFrame) -> pd.DataFrame:
-    """Enseigne tirée de brand, à défaut operator, à défaut name ; puis type d'enseigne."""
-    osm = osm.copy()
-    osm["enseigne"] = (
-        osm["brand"].map(normaliser_enseigne)
-        .fillna(osm["operator"].map(normaliser_enseigne))
-        .fillna(osm["name"].map(normaliser_enseigne))
-    )
-    osm["type_enseigne"] = np.select(
-        [osm["enseigne"].isin(GRANDES_SURFACES), osm["enseigne"].isin(MAJORS), osm["enseigne"].notna()],
-        ["grande surface", "major", "autre enseigne"],
-        default="inconnue",
-    )
+def type_enseigne(nom):
+    """Grande surface, major, autre enseigne ou inconnue."""
+    if nom in GRANDES_SURFACES:
+        return "grande surface"
+    if nom in MAJORS:
+        return "major"
+    return "autre enseigne" if isinstance(nom, str) else "inconnue"
+
+
+def charger_osm():
+    """Stations-service OpenStreetMap de France avec leur enseigne (téléchargées une seule fois)."""
+    chemin = DOSSIER_BRUT / "osm_stations.json"
+    if not chemin.exists():
+        r = requests.post("https://overpass-api.de/api/interpreter", data={"data": REQUETE}, timeout=360,
+                          headers={"User-Agent": "projet-ensae-carburants",
+                                   "Referer": "https://github.com/Mathis635/Projet-pyhton-data"})
+        r.raise_for_status()
+        chemin.write_text(r.text, encoding="utf-8")
+
+    lignes = []
+    for el in json.loads(chemin.read_text(encoding="utf-8"))["elements"]:
+        centre, tags = el.get("center", el), el.get("tags", {})
+        lignes.append([f"{el['type']}/{el['id']}", centre.get("lat"), centre.get("lon"), tags.get("brand"),
+                       tags.get("operator"), tags.get("name"), tags.get("ref:FR:prix-carburants")])
+    osm = pd.DataFrame(lignes, columns=["osm_id", "lat", "lon", "brand", "operator", "name", "ref"])
+    osm = osm.dropna(subset=["lat", "lon"])
+    osm["enseigne"] = osm["brand"].map(enseigne).fillna(osm["operator"].map(enseigne)).fillna(osm["name"].map(enseigne))
+    osm["type_enseigne"] = osm["enseigne"].map(type_enseigne)
     return osm
 
 
-def apparier(stations: pd.DataFrame, osm: pd.DataFrame, seuil_m: float = 300) -> pd.DataFrame:
-    """Associe à chaque station prix-carburants une station OSM.
+def apparier(stations, osm, seuil=300):
+    """Relie chaque station à une station OSM : par identifiant, sinon la plus proche libre à moins de `seuil` m."""
+    st = stations.assign(id_station=stations["id_station"].astype(str))
+    par_ref = osm.dropna(subset=["ref"]).drop_duplicates("ref").set_index("ref")["osm_id"]
+    st["osm_id"] = st["id_station"].map(par_ref)
+    st["methode"] = np.where(st["osm_id"].notna(), "identifiant", None)
 
-    1. jointure exacte sur l'identifiant (balise ref:FR:prix-carburants) ;
-    2. pour les autres, station OSM libre la plus proche si elle est à moins de seuil_m
-       mètres, chaque station OSM ne servant qu'une fois.
-    """
-    cols = ["osm_id", "enseigne", "type_enseigne"]
-    stations = stations.copy()
-    stations["id_station"] = stations["id_station"].astype(str)
-
-    par_id = osm.dropna(subset=["ref_prix_carburants"]).drop_duplicates("ref_prix_carburants")
-    res = stations.merge(
-        par_id[cols + ["ref_prix_carburants"]],
-        left_on="id_station", right_on="ref_prix_carburants", how="left",
-    ).drop(columns="ref_prix_carburants")
-    res["methode"] = np.where(res["osm_id"].notna(), "identifiant", None)
-    res["distance_m"] = np.nan
-
-    reste = res["osm_id"].isna() & res["latitude"].notna()
-    libres = osm[~osm["osm_id"].isin(res["osm_id"].dropna())]  # OSM pas déjà pris par identifiant
+    libres = osm[~osm["osm_id"].isin(st["osm_id"])]
+    a_faire = st[st["osm_id"].isna() & st["latitude"].notna()]
     arbre = BallTree(np.radians(libres[["lat", "lon"]].to_numpy()), metric="haversine")
-    dist, idx = arbre.query(np.radians(res.loc[reste, ["latitude", "longitude"]].to_numpy()), k=1)
-    candidats = pd.DataFrame(
-        {"ligne": res.index[reste], "pos": idx[:, 0], "distance_m": dist[:, 0] * RAYON_TERRE_M}
-    )
-    # Sous le seuil, et chaque station OSM ne sert qu'une fois : la plus proche la garde
-    candidats = (
-        candidats[candidats["distance_m"] <= seuil_m]
-        .sort_values("distance_m")
-        .drop_duplicates("pos")
-    )
-    lignes = candidats["ligne"].to_numpy()
-    res.loc[lignes, cols] = libres.iloc[candidats["pos"]][cols].to_numpy()
-    res.loc[lignes, "methode"] = "plus proche voisin"
-    res.loc[lignes, "distance_m"] = candidats["distance_m"].to_numpy()
-    res["type_enseigne"] = res["type_enseigne"].fillna("non appariée")
-    return res
+    dist, idx = arbre.query(np.radians(a_faire[["latitude", "longitude"]].to_numpy()))
+    proches = pd.DataFrame({"osm_id": libres["osm_id"].to_numpy()[idx[:, 0]], "distance_m": dist[:, 0] * RAYON_TERRE},
+                           index=a_faire.index)
+    proches = proches[proches["distance_m"] <= seuil].sort_values("distance_m").drop_duplicates("osm_id")
+
+    st.loc[proches.index, "osm_id"] = proches["osm_id"]
+    st.loc[proches.index, "methode"] = "plus proche voisin"
+    st["distance_m"] = proches["distance_m"]
+    st = st.merge(osm[["osm_id", "enseigne", "type_enseigne"]], on="osm_id", how="left")
+    st["type_enseigne"] = st["type_enseigne"].fillna("non appariée")
+    return st
 
 
-def n_concurrents(stations: pd.DataFrame, rayon_m: float = 5000) -> pd.Series:
-    """Nombre de stations d'une autre enseigne dans un rayon de rayon_m mètres.
-
-    Une station d'enseigne inconnue est comptée comme concurrente.
-    """
+def n_concurrents(stations, rayon=5000):
+    """Nombre de stations d'une autre enseigne à moins de `rayon` m (enseigne inconnue comptée comme concurrente)."""
     st = stations.dropna(subset=["latitude", "longitude"])
     coords = np.radians(st[["latitude", "longitude"]].to_numpy())
-    voisins = BallTree(coords, metric="haversine").query_radius(coords, r=rayon_m / RAYON_TERRE_M)
-    enseigne = st["enseigne"].to_numpy()
-    inconnue = pd.isna(enseigne)
-    n = [
-        sum(1 for j in v if j != i and (inconnue[i] or inconnue[j] or enseigne[j] != enseigne[i]))
-        for i, v in enumerate(voisins)
-    ]
-    return pd.Series(n, index=st.index, name="n_concurrents").reindex(stations.index)
+    voisins = BallTree(coords, metric="haversine").query_radius(coords, r=rayon / RAYON_TERRE)
+    ens = st["enseigne"].fillna("?").to_numpy()
+    n = [sum(ens[j] != ens[i] or ens[i] == "?" for j in v if j != i) for i, v in enumerate(voisins)]
+    return pd.Series(n, index=st.index).reindex(stations.index)
 
 
-def stations_enseignes(
-    annee: int, seuil_m: float = 300, rayon_m: float = 5000, seuil_activite: int = 50
-) -> pd.DataFrame:
-    """Chaîne complète : stations de l'année + activité + enseigne OSM + concurrents.
-
-    Lit data/interim/stations_{annee}.parquet et prix_{annee}.parquet (produits par
-    prix.prix_annee) et écrit data/interim/stations_enseignes_{annee}.parquet.
-    Les concurrents ne sont comptés que parmi les stations actives : une station
-    fermée ou sans prix publié ne fait pas concurrence.
-    """
-    dossier = RACINE / "data" / "interim"
-    stations = pd.read_parquet(dossier / f"stations_{annee}.parquet")
-    prix = pd.read_parquet(dossier / f"prix_{annee}.parquet")
-    osm = ajouter_enseigne(table_osm(telecharger_osm()))
-
-    res = apparier(stations, osm, seuil_m=seuil_m)
-    res = res.join(activite_stations(prix, seuil=seuil_activite), on="id_station")
-    res["active"] = res["active"].fillna(False).astype(bool)  # aucun relevé : inactive
-    res["n_concurrents"] = n_concurrents(res[res["active"]], rayon_m=rayon_m)  # NaN si inactive
-    res.to_parquet(dossier / f"stations_enseignes_{annee}.parquet")
-    return res
+def stations_enseignes(annee, seuil=300, rayon=5000):
+    """Stations de l'année avec enseigne, activité et nombre de concurrents, enregistrées en Parquet."""
+    stations = pd.read_parquet(DOSSIER_INTERMEDIAIRE / f"stations_{annee}.parquet")
+    prix = pd.read_parquet(DOSSIER_INTERMEDIAIRE / f"prix_{annee}.parquet")
+    st = apparier(stations, charger_osm(), seuil)
+    st = st.join(activite_stations(prix), on="id_station")
+    st["active"] = st["active"].eq(True)
+    st["n_concurrents"] = n_concurrents(st[st["active"]], rayon)
+    st.to_parquet(DOSSIER_INTERMEDIAIRE / f"stations_enseignes_{annee}.parquet")
+    return st
