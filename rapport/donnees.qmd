@@ -1,0 +1,112 @@
+## Données
+
+### Sources
+
+| Source | Contenu | Accès |
+| --- | --- | --- |
+| prix-carburants.gouv.fr | Prix de chaque station, à chaque changement, par carburant | Archive XML annuelle |
+| OpenStreetMap | Position et enseigne des stations-service | API Overpass |
+| FRED | Prix du Brent (dollars par baril) et taux de change EUR/USD | Fichiers CSV |
+
+Toutes les données sont téléchargées depuis leur source par le code ci-dessous ; une copie de l'archive et de la réponse OpenStreetMap est conservée dans `data/raw/` pour ne pas les retélécharger.
+
+### Collecte des prix
+
+L'archive annuelle est un fichier XML (361 Mo pour 2022). Il est lu élément par élément, sans être chargé en entier en mémoire, et réparti en deux tables : les stations (position, adresse, route ou autoroute) et les relevés de prix (station, carburant, date et heure, prix). Les prix sont convertis en euros par litre et les coordonnées en degrés.
+
+```{python}
+#| label: collecte-prix
+prix.prix_annee(ANNEE)
+releves = pd.read_parquet(prix.DOSSIER_INTERMEDIAIRE / f"prix_{ANNEE}.parquet")
+stations = pd.read_parquet(prix.DOSSIER_INTERMEDIAIRE / f"stations_{ANNEE}.parquet")
+pd.DataFrame(
+    {"valeur": [len(stations), len(releves), releves["date_maj"].min(), releves["date_maj"].max()]},
+    index=["stations", "relevés de prix", "premier relevé", "dernier relevé"],
+)
+```
+
+Premières lignes des deux tables. `pop` vaut R pour une station de route, A pour une station d'autoroute ; une ligne de relevé correspond à un changement de prix.
+
+```{python}
+#| label: tete-stations
+stations.head()
+```
+
+```{python}
+#| label: tete-releves
+releves.head()
+```
+
+### Enseignes et concurrence locale
+
+Le fichier des prix ne donne ni l'enseigne des stations ni leur environnement concurrentiel. Les deux viennent d'OpenStreetMap.
+
+Chaque station est reliée à une station OpenStreetMap par l'identifiant officiel quand il est renseigné. Sinon, on retient la station OpenStreetMap la plus proche à moins de 300 m, chaque station OpenStreetMap ne servant qu'une fois. Le seuil vient de l'écart de position mesuré sur les correspondances par identifiant : 62 m en médiane, 178 m au troisième quartile. Les libellés de marque sont ramenés à une enseigne, puis à un type : grande surface, major pétrolière ou autre.
+
+La réponse d'OpenStreetMap donne, pour chaque station, sa position et une liste d'étiquettes libres (marque, exploitant, nom, identifiant officiel…). Un élément brut, puis la table qui en est tirée :
+
+```{python}
+#| label: tete-osm-brut
+import json
+
+json.loads((prix.DOSSIER_BRUT / "osm_stations.json").read_text(encoding="utf-8"))["elements"][1]
+```
+
+```{python}
+#| label: tete-osm
+osm.charger_osm().head()
+```
+
+Une station est considérée comme active si elle a publié au moins 50 prix de carburants routiers dans l'année. Pour chaque station active, on compte les stations actives d'une autre enseigne situées à moins de 5 km.
+
+```{python}
+#| label: appariement
+stations_ens = osm.stations_enseignes(ANNEE)
+actives = stations_ens[stations_ens["active"]]
+pd.DataFrame({
+    "stations": actives["methode"].fillna("non appariée").value_counts(),
+    "part (%)": (actives["methode"].fillna("non appariée").value_counts(normalize=True) * 100).round(1),
+})
+```
+
+Table des stations complétée : enseigne, type, méthode d'appariement (la distance n'est renseignée que pour le plus proche voisin), nombre de relevés par carburant, activité et nombre de concurrents (stations actives seulement).
+
+```{python}
+#| label: tete-stations-enseignes
+stations_ens.head()
+```
+
+```{python}
+#| label: fig-enseignes
+#| fig-cap: "Stations actives selon le type d'enseigne."
+carte_types_enseigne(actives);
+```
+
+Les stations sans enseigne, plus nombreuses en ville dans le fichier complet, sont presque toutes des stations fermées : elles n'ont publié aucun prix dans l'année. Parmi les stations actives, la part sans enseigne est faible.
+
+### Nettoyage
+
+Les relevés passent par quatre filtres successifs : les quatre carburants routiers (Gazole, E10, SP95, SP98) ; un prix compris entre 0,5 et 3 €/L ; un écart d’au plus 40 % à la médiane nationale du même carburant le même jour, qui écarte les erreurs de saisie ; les stations actives.
+
+On garde ensuite le dernier prix de chaque journée. Un jour sans changement reprend le dernier prix connu, puisque le prix affiché reste valable tant qu'il n'est pas modifié ; ce report s'arrête au dernier relevé de la station. On obtient un panel station × carburant × jour, sur lequel on calcule la variation de prix d'un jour à l'autre.
+
+```{python}
+#| label: nettoyage
+panel, journal = nettoyage.panel_annee(ANNEE)
+journal
+```
+
+```{python}
+#| label: taille-panel
+pd.DataFrame(
+    {"valeur": [len(panel), panel["id_station"].nunique(), panel["jour"].nunique()]},
+    index=["observations station × carburant × jour", "stations", "jours"],
+)
+```
+
+Premières lignes du panel :
+
+```{python}
+#| label: tete-panel
+panel.head()
+```

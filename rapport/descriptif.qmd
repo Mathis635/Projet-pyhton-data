@@ -1,0 +1,55 @@
+## Analyse descriptive
+
+### Niveaux et changements de prix
+
+```{python}
+#| label: tab-resume
+ds.tableau_resume(panel)
+```
+
+```{python}
+#| label: tab-changements
+ds.tableau_changements(panel)
+```
+
+### Évolution sur l'année
+
+```{python}
+#| label: fig-infographie-gazole
+#| fig-cap: "Gazole : prix moyen et dispersion entre stations, jour par jour."
+ds.infographie_prix(panel, "Gazole");
+```
+
+```{python}
+#| label: fig-prix-moyen
+#| fig-cap: "Prix moyen par carburant."
+ds.serie_prix_moyen(panel);
+```
+
+```{python}
+#| label: fig-dispersion
+#| fig-cap: "Écart entre le dernier et le premier décile des prix, moyenne mobile sur 7 jours, par carburant."
+ds.serie_dispersion(panel);
+```
+
+### Taille des changements
+
+```{python}
+#| label: fig-variations
+#| fig-cap: "Taille des changements de prix du gazole."
+ds.histogramme_variations(panel);
+```
+
+### Enseignes
+
+```{python}
+#| label: fig-type-enseigne
+#| fig-cap: "Prix moyen annuel du gazole par type d'enseigne."
+ds.boites_type_enseigne(panel, stations_ens);
+```
+
+```{python}
+#| label: fig-carte-prix
+#| fig-cap: "Prix moyen annuel du gazole par station."
+ds.carte_prix(panel, stations_ens);
+```

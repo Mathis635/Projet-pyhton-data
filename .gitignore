@@ -12,3 +12,7 @@ _site/
 
 **/*.quarto_ipynb
 *.png
+
+/.quarto/
+rapport/index.html
+rapport/index_files/
