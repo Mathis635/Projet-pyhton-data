@@ -34,12 +34,6 @@ $$\Delta p_t = \alpha + \sum_{k=0}^{K}\left(\beta_k^{+}\,\Delta c^{+}_{t-k} + \b
 
 $\Delta c^{+}_t = \max(\Delta c_t, 0)$ et $\Delta c^{-}_t = \min(\Delta c_t, 0)$ séparent les hausses et les baisses du coût ; $\beta_k^{\pm}$ est l'effet sur le prix du jour d'une hausse ou d'une baisse survenue $k$ jours plus tôt ; $\varepsilon_t$ est l'erreur. Estimation par moindres carrés ordinaires, écarts-types de Newey-West (robustes à l'autocorrélation et à l'hétéroscédasticité). La transmission cumulée après $k$ jours est $\sum_{j \le k} \beta_j^{\pm}$.
 
-Sur les graphiques, la courbe donne la transmission cumulée estimée $\hat B_k^{\pm} = \hat\beta_0^{\pm} + \dots + \hat\beta_k^{\pm}$ et le couloir coloré son intervalle de confiance à 95 %, $\hat B_k^{\pm} \pm 1{,}96\,\hat\sigma_k$. Les $\hat\beta_j$ étant corrélés, la variance de leur somme est la somme de tous les termes de leur matrice de covariance (Newey-West) :
-
-$$\hat\sigma_k^2 = \sum_{i=0}^{k}\sum_{j=0}^{k}\widehat{\operatorname{Cov}}\big(\hat\beta_i^{\pm}, \hat\beta_j^{\pm}\big)$$
-
-Le couloir s'élargit avec $k$ parce qu'on additionne de plus en plus de coefficients estimés. Quand il contient 1, une transmission complète n'est pas rejetée ce jour-là ; quand les couloirs rouge et bleu se recouvrent, on ne peut pas conclure, à ce jour-là, que hausses et baisses sont transmises différemment. Le test « mêmes coefficients jour par jour » porte sur l'ensemble du profil et peut rejeter l'égalité même quand les couloirs se recouvrent.
-
 ```{python}
 #| label: modele-b
 K = 21

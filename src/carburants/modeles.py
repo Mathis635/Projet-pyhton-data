@@ -3,28 +3,16 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
-from carburants.couts import charger_serie_fred
 from carburants.descriptif import COULEUR_BAISSE, COULEUR_HAUSSE
 from carburants.prix import DOSSIER_INTERMEDIAIRE
 
 TVA = 0.2
-URL_FRED = "https://fred.stlouisfed.org/graph/fredgraph.csv?id="
-COTATIONS = {"Gazole": "DDFUELNYH", "E10": "DGASNYH", "SP95": "DGASNYH", "SP98": "DGASNYH"}
-LITRES_PAR_GALLON = 3.78541
-REMISES_ETAT = [("2022-04-01", "2022-08-31", 0.18), ("2022-09-01", "2022-11-15", 0.30),
-                ("2022-11-16", "2022-12-31", 0.10)]
 
 
-def remise_etat(jours):
-    """Montant TTC de la remise de l'État (€/L), jour par jour."""
-    r = pd.Series(0.0, index=jours.index)
-    for debut, fin, montant in REMISES_ETAT:
-        r[jours.between(debut, fin)] = montant
-    return r
+def prix_hors_taxes(annees, carburant, couts):
+    """Prix hors taxes par station et par jour, hors stations TotalEnergies.
 
-
-def prix_hors_tva(annees, carburant="Gazole"):
-    """Prix hors TVA, remise de l'État réintégrée, hors stations TotalEnergies, sur plusieurs années."""
+    (prix TTC + remise de l'État) / 1,2 − accise ; remise et accise viennent de la table des coûts."""
     morceaux = []
     for a in annees:
         p = pd.read_parquet(DOSSIER_INTERMEDIAIRE / f"panel_{a}.parquet",
@@ -33,23 +21,15 @@ def prix_hors_tva(annees, carburant="Gazole"):
         total = st.loc[st["enseigne"] == "TotalEnergies", "id_station"].astype(str)
         morceaux.append(p[(p["carburant"] == carburant) & ~p["id_station"].isin(total)])
     p = pd.concat(morceaux, ignore_index=True)
-    p["prix"] = (p["prix_ttc"] + remise_etat(p["jour"])) / (1 + TVA)
+    p = p.merge(couts[["jour", "carburant", "accise_eur_l", "remise_etat_ttc"]], on=["jour", "carburant"])
+    p["prix"] = (p["prix_ttc"] + p["remise_etat_ttc"]) / (1 + TVA) - p["accise_eur_l"]
     return p[["id_station", "jour", "prix"]]
 
 
-def cout_produit(carburant, couts):
-    """Cotation quotidienne du produit raffiné à New York (FRED, $/gallon), convertie en €/L."""
-    cotation = charger_serie_fred(URL_FRED + COTATIONS[carburant], "usd_gallon")
-    d = couts[["date", "eurusd"]].merge(cotation, on="date", how="left")
-    d["usd_gallon"] = d["usd_gallon"].ffill()
-    d["cout_eur_l"] = d["usd_gallon"] / (d["eurusd"] * LITRES_PAR_GALLON)
-    return d[["date", "cout_eur_l"]]
-
-
-def serie_nationale(prix, couts):
-    """Prix moyen national hors TVA (p) et coût du pétrole brut (c), en €/L, jour par jour."""
+def serie_nationale(prix, couts, carburant):
+    """Prix moyen national hors taxes (p) et coût du pétrole brut (c), en €/L, jour par jour."""
     p = prix.groupby("jour")["prix"].mean().rename("p")
-    c = couts.set_index("date")["cout_eur_l"].rename("c")
+    c = couts[couts["carburant"] == carburant].set_index("jour")["cout_eur_l"].rename("c")
     return pd.concat([p, c], axis=1, join="inner")
 
 
