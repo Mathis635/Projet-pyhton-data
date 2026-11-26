@@ -40,18 +40,18 @@ def prix_hors_tva(annees, carburant="Gazole"):
 def cout_produit(carburant, couts):
     """Cotation quotidienne du produit raffiné à New York (FRED, $/gallon), convertie en €/L."""
     cotation = charger_serie_fred(URL_FRED + COTATIONS[carburant], "usd_gallon")
-    d = couts[["date", "eurusd"]].merge(cotation, on="date", how="left")
+    base = couts[["jour", "eurusd"]].drop_duplicates("jour")
+    d = base.merge(cotation, on="jour", how="left")
     d["usd_gallon"] = d["usd_gallon"].ffill()
     d["cout_eur_l"] = d["usd_gallon"] / (d["eurusd"] * LITRES_PAR_GALLON)
-    return d[["date", "cout_eur_l"]]
+    return d[["jour", "cout_eur_l"]]
 
 
 def serie_nationale(prix, couts):
-    """Prix moyen national hors TVA (p) et coût du pétrole brut (c), en €/L, jour par jour."""
+    """Prix moyen national hors TVA (p) et coût du produit (c), en €/L, jour par jour."""
     p = prix.groupby("jour")["prix"].mean().rename("p")
-    c = couts.set_index("date")["cout_eur_l"].rename("c")
+    c = couts.set_index("jour")["cout_eur_l"].rename("c")
     return pd.concat([p, c], axis=1, join="inner")
-
 
 def retards(x, nom, K):
     """Colonnes x_t, x_{t-1}, ..., x_{t-K}."""
