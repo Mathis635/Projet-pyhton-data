@@ -16,7 +16,7 @@ PERIODES_REMISE_ETAT = [
 
 
 def moyennes_par_station(panel, carburant="Gazole"):
-    """Prix moyen de chaque station sur l'année, pour un carburant."""
+    """Prix moyen de chaque station sur la période, pour un carburant."""
     return panel[panel["carburant"] == carburant].groupby("id_station")["prix_ttc"].mean()
 
 
@@ -40,13 +40,14 @@ def tableau_changements(panel):
     """Par carburant : nombre et ampleur moyenne des hausses et des baisses de prix."""
     v = panel[panel["changement"]]
     hausse = v["variation"] > 0
+    n_annees = panel["jour"].dt.year.nunique()
     tab = pd.DataFrame({
         "hausses": v[hausse].groupby("carburant").size(),
         "baisses": v[~hausse].groupby("carburant").size(),
         "hausse moyenne (c€)": v[hausse].groupby("carburant")["variation"].mean() * 100,
         "baisse moyenne (c€)": v[~hausse].groupby("carburant")["variation"].mean() * 100,
         "changements par station et par an": v.groupby("carburant").size()
-        / panel.groupby("carburant")["id_station"].nunique(),
+        / panel.groupby("carburant")["id_station"].nunique() / n_annees,
     })
     return tab.reindex(CARBURANTS_ROUTIERS).round(2)
 
@@ -112,7 +113,7 @@ def histogramme_variations(panel, carburant="Gazole"):
 
 
 def boites_type_enseigne(panel, stations, carburant="Gazole"):
-    """Prix moyen annuel des stations, par type d'enseigne."""
+    """Prix moyen des stations sur la période, par type d'enseigne."""
     moy = moyennes_par_station(panel, carburant)
     types = stations.set_index(stations["id_station"].astype(str))["type_enseigne"].reindex(moy.index)
     ordre = ["grande surface", "major", "autre enseigne", "inconnue", "non appariée"]
@@ -122,13 +123,13 @@ def boites_type_enseigne(panel, stations, carburant="Gazole"):
                         showfliers=False, patch_artist=True, medianprops={"color": "black"})
     for boite, (t, _) in zip(boites["boxes"], groupes):
         boite.set_facecolor(COULEURS_TYPE[t])
-    ax.set_ylabel(f"Prix moyen annuel du {carburant.lower()} (€/L)")
+    ax.set_ylabel(f"Prix moyen du {carburant.lower()} (€/L)")
     ax.set_title("Prix moyen des stations selon le type d'enseigne")
     return fig
 
 
 def carte_prix(panel, stations, carburant="Gazole"):
-    """Carte du prix moyen annuel de chaque station ; du vert (moins cher) au rouge (plus cher)."""
+    """Carte du prix moyen de chaque station sur la période ; du vert (moins cher) au rouge (plus cher)."""
     moy = moyennes_par_station(panel, carburant).rename("prix")
     st = stations.copy()
     st["id_station"] = st["id_station"].astype(str)
@@ -138,7 +139,7 @@ def carte_prix(panel, stations, carburant="Gazole"):
     fig, ax = plt.subplots(figsize=(8, 8))
     nuage = ax.scatter(st["longitude"], st["latitude"], c=st["prix"], cmap="RdYlGn_r",
                        vmin=bas, vmax=haut, s=3)
-    fig.colorbar(nuage, ax=ax, shrink=0.7, label=f"Prix moyen annuel du {carburant.lower()} (€/L)")
+    fig.colorbar(nuage, ax=ax, shrink=0.7, label=f"Prix moyen du {carburant.lower()} (€/L)")
     preparer_axes(ax, f"Prix moyen du {carburant.lower()} par station")
     return fig
 
@@ -165,6 +166,6 @@ def infographie_prix(panel, carburant="Gazole"):
     ax.set_xlabel("Date")
     ax.set_ylabel("Prix TTC (€/L)")
     ax.set_title(f"{carburant} : prix moyen et dispersion entre stations, jour par jour")
-    ax.legend(loc="lower left", fontsize=8, ncols=2)
+    ax.legend(loc="upper left", fontsize=8, ncols=2)
     fig.tight_layout()
     return fig

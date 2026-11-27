@@ -147,15 +147,26 @@ panel.head()
 
 ### Années 2021 et 2023
 
-Les modèles portent sur 2021 à 2023. Les mêmes étapes (collecte, enseignes, nettoyage) sont appliquées aux deux autres années. Nombre de relevés restant après chaque filtre :
+L'analyse descriptive et les modèles portent sur 2021 à 2023. Les mêmes étapes (collecte, enseignes, nettoyage) sont appliquées aux deux autres années. Nombre de relevés restant après chaque filtre :
 
 ```{python}
 #| label: autres-annees
 journaux = {ANNEE: journal}
+panels = {ANNEE: panel}
 for a in [2021, 2023]:
     prix.prix_annee(a)
     osm.stations_enseignes(a)
-    journaux[a] = nettoyage.panel_annee(a)[1]
+    panels[a], journaux[a] = nettoyage.panel_annee(a)
 pd.DataFrame(journaux)[[2021, 2022, 2023]]
+```
+
+Les trois panels annuels sont mis bout à bout ; c'est ce panel qui sert dans la suite.
+
+```{python}
+#| label: panel-trois-annees
+panel = pd.concat([panels[2021], panels[2022], panels[2023]], ignore_index=True)
+del panels
+annee = panel["jour"].dt.year
+pd.DataFrame({"observations": panel.groupby(annee).size(), "stations": panel.groupby(annee)["id_station"].nunique()})
 ```
 

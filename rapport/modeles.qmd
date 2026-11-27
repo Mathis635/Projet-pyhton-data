@@ -87,7 +87,7 @@ Le coût retenu est celui du pétrole brut. Le prix à la pompe suit, lui, le pr
 
 ### Présence d'une station Total et vitesse de transmission
 
-TotalEnergies est le premier réseau de stations en France et a pratiqué ses propres remises en 2022. Les stations situées près d'une Total répercutent-elles le coût différemment, par exemple plus lentement à la hausse et plus vite à la baisse pour rester compétitives ?
+TotalEnergies est l'enseigne la plus représentée parmi les stations actives (2 118 stations en 2022) et a pratiqué ses propres remises en 2022. Les stations situées près d'une Total répercutent-elles le coût différemment, par exemple plus lentement à la hausse et plus vite à la baisse pour rester compétitives ?
 
 On compare deux groupes de stations, hors TotalEnergies et hors autoroute : celles qui ont une station Total active à moins de 3 km ($T_i = 1$) et les autres ($T_i = 0$). Le modèle de transmission asymétrique est complété par un terme propre au premier groupe :
 

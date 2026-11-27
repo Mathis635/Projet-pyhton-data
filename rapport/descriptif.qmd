@@ -1,5 +1,7 @@
 ## Analyse descriptive
 
+L'analyse porte sur les trois années, 2021 à 2023.
+
 ### Niveaux et changements de prix
 
 ```{python}
@@ -12,7 +14,7 @@ ds.tableau_resume(panel)
 ds.tableau_changements(panel)
 ```
 
-### Évolution sur l'année
+### Évolution sur la période
 
 Construction du graphique ci-dessous, fonction `infographie_prix` de `descriptif.py` :
 
@@ -52,12 +54,12 @@ ds.histogramme_variations(panel);
 
 ```{python}
 #| label: fig-type-enseigne
-#| fig-cap: "Prix moyen annuel du gazole par type d'enseigne."
+#| fig-cap: "Prix moyen du gazole par station sur 2021-2023, par type d'enseigne."
 ds.boites_type_enseigne(panel, stations_ens);
 ```
 
 ```{python}
 #| label: fig-carte-prix
-#| fig-cap: "Prix moyen annuel du gazole par station."
+#| fig-cap: "Prix moyen du gazole par station sur 2021-2023."
 ds.carte_prix(panel, stations_ens);
 ```
