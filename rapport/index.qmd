@@ -36,3 +36,24 @@ pd.set_option("display.precision", 3)
 def montrer(fonction):
     """Affiche le code source d'une fonction du projet."""
     return Markdown(f"```python\n{inspect.getsource(fonction)}```")
+```
+
+
+## Introduction
+
+Les prix à la pompe répercutent-ils de la même façon les hausses et les baisses du prix du pétrole ? L'hypothèse dite « rockets and feathers » soutient que les hausses sont transmises plus vite que les baisses. Ce rapport la teste sur les prix quotidiens de toutes les stations-service de France métropolitaine de 2021 à 2023, une période qui couvre la forte hausse de 2022, la baisse qui a suivi et les remises carburant de l'État et de TotalEnergies. Il se demande ensuite si cette transmission dépend du marché local : les stations situées près d'une station TotalEnergies, ou dans une commune aisée, répercutent-elles le coût différemment ?
+
+{{< include donnees.qmd >}}
+
+{{< include descriptif.qmd >}}
+
+{{< include modeles.qmd >}}
+
+## Conclusion
+
+
+Ce rapport étudie la transmission des variations du prix du pétrole brut aux prix à la pompe en France métropolitaine entre 2021 et 2023, à partir de l'ensemble des relevés officiels quotidiens des stations-service (plus de 9 300 stations actives et près de 10 millions d'observations station × carburant × jour pour la seule année 2022), enrichis par les enseignes issues d'OpenStreetMap et les données communales de revenu de l'Insee.
+
+L'analyse descriptive met en évidence des prix fréquemment ajustés — autour de 115 changements par an et par station pour le gazole et l'E10 — ainsi que des écarts marqués selon le réseau de distribution, les grandes surfaces pratiquant systématiquement des tarifs inférieurs aux majors pétrolières et aux stations d'autoroute. Sur le plan économétrique, l'estimation de modèles à retards échelonnés asymétriques confirme l'hypothèse dite *« rockets and feathers »* dans sa dimension dynamique : si la transmission cumulée à un horizon de trois semaines ne diffère pas significativement entre hausses et baisses du coût du brut, l'égalité conjointe des coefficients jour par jour est nettement rejetée pour le gazole comme pour l'E10, traduisant une vitesse d'ajustement asymétrique à court terme. L'analyse par sous-groupes suggère enfin que l'environnement concurrentiel local (proximité d'une station TotalEnergies) et les caractéristiques socio-économiques de la commune (revenu médian) modulent cette dynamique d'ajustement, même si ces deux dimensions restent corrélées à la densité urbaine.
+
+Deux limites principales invitent à prolonger ce travail. D'une part, l'utilisation du cours du pétrole brut plutôt que des cotations de produits raffinés (type Rotterdam) intègre les chocs de marge de raffinage — particulièrement prononcés sur le gazole en 2022 — dans le coefficient de transmission estimé. D'autre part, une estimation en panel avec effets fixes stations et contrôles explicites de densité concurrentielle permettrait d'isoler plus finement l'effet propre de la concurrence locale de celui du niveau de vie communal.
