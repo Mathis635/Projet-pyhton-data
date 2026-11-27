@@ -7,12 +7,22 @@
 | prix-carburants.gouv.fr | Prix de chaque station, à chaque changement, par carburant | Archive XML annuelle |
 | OpenStreetMap | Position et enseigne des stations-service | API Overpass |
 | FRED | Prix du Brent (dollars par baril) et taux de change EUR/USD | Fichiers CSV |
+| DGDDI, décrets n° 2022-423, 2022-1042, 2022-1168, 2022-1355, communiqué TotalEnergies | Accises par carburant, calendrier des remises de 2022 | Valeurs reportées dans `couts.py` |
+| Etalab, Insee (recensement, Filosofi 2021) | Contours des communes, population, revenu médian | GeoJSON et Parquet sur data.gouv.fr |
 
 Toutes les données sont téléchargées depuis leur source par le code ci-dessous ; une copie de l'archive et de la réponse OpenStreetMap est conservée dans `data/raw/` pour ne pas les retélécharger.
 
 ### Collecte des prix
 
 L'archive annuelle est un fichier XML (361 Mo pour 2022). Il est lu élément par élément, sans être chargé en entier en mémoire, et réparti en deux tables : les stations (position, adresse, route ou autoroute) et les relevés de prix (station, carburant, date et heure, prix). Les prix sont convertis en euros par litre et les coordonnées en degrés.
+
+Lecture du XML, fonction `lire_xml` de `prix.py` :
+
+```{python}
+#| label: code-lire-xml
+#| echo: false
+montrer(prix.lire_xml)
+```
 
 ```{python}
 #| label: collecte-prix
@@ -59,6 +69,14 @@ osm.charger_osm().head()
 
 Une station est considérée comme active si elle a publié au moins 50 prix de carburants routiers dans l'année. Pour chaque station active, on compte les stations actives d'une autre enseigne situées à moins de 5 km.
 
+Appariement aux stations OpenStreetMap, fonction `apparier` de `osm.py` :
+
+```{python}
+#| label: code-apparier
+#| echo: false
+montrer(osm.apparier)
+```
+
 ```{python}
 #| label: appariement
 stations_ens = osm.stations_enseignes(ANNEE)
@@ -90,6 +108,22 @@ Les relevés passent par quatre filtres successifs : les quatre carburants routi
 
 On garde ensuite le dernier prix de chaque journée. Un jour sans changement reprend le dernier prix connu, puisque le prix affiché reste valable tant qu'il n'est pas modifié ; ce report s'arrête au dernier relevé de la station. On obtient un panel station × carburant × jour, sur lequel on calcule la variation de prix d'un jour à l'autre.
 
+Filtres successifs, fonction `filtrer_releves` de `nettoyage.py` :
+
+```{python}
+#| label: code-filtrer
+#| echo: false
+montrer(nettoyage.filtrer_releves)
+```
+
+Passage au prix quotidien, fonction `prix_journaliers` :
+
+```{python}
+#| label: code-journaliers
+#| echo: false
+montrer(nettoyage.prix_journaliers)
+```
+
 ```{python}
 #| label: nettoyage
 panel, journal = nettoyage.panel_annee(ANNEE)
@@ -110,3 +144,18 @@ Premières lignes du panel :
 #| label: tete-panel
 panel.head()
 ```
+
+### Années 2021 et 2023
+
+Les modèles portent sur 2021 à 2023. Les mêmes étapes (collecte, enseignes, nettoyage) sont appliquées aux deux autres années. Nombre de relevés restant après chaque filtre :
+
+```{python}
+#| label: autres-annees
+journaux = {ANNEE: journal}
+for a in [2021, 2023]:
+    prix.prix_annee(a)
+    osm.stations_enseignes(a)
+    journaux[a] = nettoyage.panel_annee(a)[1]
+pd.DataFrame(journaux)[[2021, 2022, 2023]]
+```
+

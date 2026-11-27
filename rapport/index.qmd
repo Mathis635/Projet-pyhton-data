@@ -1,5 +1,6 @@
 ---
 title: "Transmission du prix du pétrole aux prix à la pompe en France"
+subtitle: "Version de travail, non définitive"
 authors:
   - Mathis Chartier
   - Hugues Woto
@@ -7,6 +8,8 @@ lang: fr
 format:
   html:
     code-fold: true
+    code-tools: true
+    code-summary: "Code"
     toc: true
     number-sections: true
 execute:
@@ -17,7 +20,10 @@ execute:
 ```{python}
 #| label: setup
 #| include: false
+import inspect
+
 import pandas as pd
+from IPython.display import Markdown
 
 from carburants import descriptif as ds
 from carburants import nettoyage, osm, prix
@@ -25,11 +31,20 @@ from carburants.cartes import carte_types_enseigne
 
 ANNEE = 2022
 pd.set_option("display.precision", 3)
+
+
+def montrer(fonction):
+    """Affiche le code source d'une fonction du projet."""
+    return Markdown(f"```python\n{inspect.getsource(fonction)}```")
 ```
+
+::: {.callout-warning}
+Version de travail présentée pour la soutenance. Le rapport n'est pas finalisé : les commentaires des résultats, la conclusion et la relecture d'ensemble seront complétés la semaine prochaine.
+:::
 
 ## Introduction
 
-Les prix à la pompe répercutent-ils de la même façon les hausses et les baisses du prix du pétrole ? L'hypothèse dite « rockets and feathers » soutient que les hausses sont transmises plus vite que les baisses. Ce rapport la teste sur les prix quotidiens de toutes les stations-service de France métropolitaine, et regarde si l'asymétrie dépend de la concurrence locale. L'année 2022 sert de cas central : forte hausse au printemps, baisse ensuite, et remises carburant de l'État et de TotalEnergies.
+Les prix à la pompe répercutent-ils de la même façon les hausses et les baisses du prix du pétrole ? L'hypothèse dite « rockets and feathers » soutient que les hausses sont transmises plus vite que les baisses. Ce rapport la teste sur les prix quotidiens de toutes les stations-service de France métropolitaine de 2021 à 2023, une période qui couvre la forte hausse de 2022, la baisse qui a suivi et les remises carburant de l'État et de TotalEnergies. Il se demande ensuite si cette transmission dépend du marché local : les stations situées près d'une station TotalEnergies, ou dans une commune aisée, répercutent-elles le coût différemment ?
 
 {{< include donnees.qmd >}}
 
@@ -38,3 +53,5 @@ Les prix à la pompe répercutent-ils de la même façon les hausses et les bais
 {{< include modeles.qmd >}}
 
 ## Conclusion
+
+À rédiger.

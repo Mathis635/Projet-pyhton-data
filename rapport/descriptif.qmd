@@ -14,6 +14,14 @@ ds.tableau_changements(panel)
 
 ### Évolution sur l'année
 
+Construction du graphique ci-dessous, fonction `infographie_prix` de `descriptif.py` :
+
+```{python}
+#| label: code-infographie
+#| echo: false
+montrer(ds.infographie_prix)
+```
+
 ```{python}
 #| label: fig-infographie-gazole
 #| fig-cap: "Gazole : prix moyen et dispersion entre stations, jour par jour."

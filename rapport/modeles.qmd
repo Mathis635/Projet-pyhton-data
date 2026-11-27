@@ -13,21 +13,32 @@ couts = construire_table_couts()
 couts.head()
 ```
 
+Code de la table des coûts, fonction `construire_table_couts` de `couts.py` :
+
+```{python}
+#| label: code-couts
+#| echo: false
+montrer(construire_table_couts)
+```
+
 Le prix étudié est le prix moyen national hors taxes, remise de l'État réintégrée :
 
 $$p_t = \frac{P^{TTC}_t + R_t}{1{,}2} - A$$
 
 où $P^{TTC}_t$ est le prix moyen TTC du jour $t$ (€/L), $R_t$ la remise TTC de l'État ce jour-là et $A$ l'accise du carburant (€/L). Les stations TotalEnergies sont exclues : leurs propres remises de 2022 ne passent qu'en partie dans les prix affichés. Le coût $c_t$ est le coût du pétrole brut de la table ci-dessus.
 
+Calcul du prix hors taxes à partir de la table des coûts, fonction `prix_hors_taxes` de `modeles.py` :
+
+```{python}
+#| label: code-prix-ht
+#| echo: false
+montrer(mo.prix_hors_taxes)
+```
+
 ```{python}
 #| label: series-modeles
 ANNEES = [2021, 2022, 2023]
 CARBURANTS = ["Gazole", "E10"]
-for a in [2021, 2023]:
-    prix.prix_annee(a)
-    osm.stations_enseignes(a)
-    nettoyage.panel_annee(a)
-
 prix_ht = {c: mo.prix_hors_taxes(ANNEES, c, couts) for c in CARBURANTS}
 series = {c: mo.serie_nationale(prix_ht[c], couts, c) for c in CARBURANTS}
 series["Gazole"].head()
@@ -44,6 +55,14 @@ Sur les graphiques, la courbe donne la transmission cumulée estimée $\hat B_k^
 $$\hat\sigma_k^2 = \sum_{i=0}^{k}\sum_{j=0}^{k}\widehat{\operatorname{Cov}}\big(\hat\beta_i^{\pm}, \hat\beta_j^{\pm}\big)$$
 
 Le couloir s'élargit avec $k$ parce qu'on additionne de plus en plus de coefficients estimés. Quand il contient 1, une transmission complète n'est pas rejetée ce jour-là ; quand les couloirs rouge et bleu se recouvrent, on ne peut pas conclure, à ce jour-là, que hausses et baisses sont transmises différemment. Le test « mêmes coefficients jour par jour » porte sur l'ensemble du profil et peut rejeter l'égalité même quand les couloirs se recouvrent.
+
+Estimation du modèle, fonction `modele_asymetrique` :
+
+```{python}
+#| label: code-modele
+#| echo: false
+montrer(mo.modele_asymetrique)
+```
 
 ```{python}
 #| label: modele-b
@@ -65,3 +84,71 @@ mo.graphique_transmission(modeles_b["E10"], K);
 ```
 
 Le coût retenu est celui du pétrole brut. Le prix à la pompe suit, lui, le prix des carburants raffinés, qui comprend la marge de raffinage. En 2022, cette marge a fortement augmenté pour le gazole : une transmission cumulée supérieure à 1 traduit cet écart entre brut et raffiné, et non une répercussion de plus de 100 % du coût.
+
+### Présence d'une station Total et vitesse de transmission
+
+TotalEnergies est le premier réseau de stations en France et a pratiqué ses propres remises en 2022. Les stations situées près d'une Total répercutent-elles le coût différemment, par exemple plus lentement à la hausse et plus vite à la baisse pour rester compétitives ?
+
+On compare deux groupes de stations, hors TotalEnergies et hors autoroute : celles qui ont une station Total active à moins de 3 km ($T_i = 1$) et les autres ($T_i = 0$). Le modèle de transmission asymétrique est complété par un terme propre au premier groupe :
+
+$$\Delta p_{it} = \alpha + \sum_{k=0}^{K}\left(\beta_k^{+}\Delta c^{+}_{t-k} + \beta_k^{-}\Delta c^{-}_{t-k}\right) + \sum_{k=0}^{K}\left(\theta_k^{+}\,T_i\,\Delta c^{+}_{t-k} + \theta_k^{-}\,T_i\,\Delta c^{-}_{t-k}\right) + \varepsilon_{it}, \qquad K = 7$$
+
+où $\Delta p_{it}$ est la variation du prix hors taxes du gazole de la station $i$ le jour $t$, $\beta_k^{\pm}$ la transmission pour les stations sans Total à proximité et $\theta_k^{\pm}$ l'écart de transmission des stations proches d'une Total. Les variables explicatives ne dépendant que du jour et du groupe, $\theta_k^{\pm}$ s'obtient en régressant l'écart entre les variations moyennes des deux groupes, $\overline{\Delta p}^{\,T=1}_t - \overline{\Delta p}^{\,T=0}_t$, sur les hausses et les baisses du coût (moindres carrés ordinaires, écarts-types de Newey-West). L'écart cumulé au bout de $k$ jours est $\Theta^{\pm}_k = \sum_{j \le k}\theta_j^{\pm}$ : $\Theta^{+}_k < 0$ signifierait un retard à la hausse près d'une Total, $\Theta^{-}_k > 0$ une avance à la baisse.
+
+Variations moyennes des deux groupes, fonction `series_groupes` (la même sert pour le revenu ci-dessous) :
+
+```{python}
+#| label: code-series-total
+#| echo: false
+montrer(mo.series_groupes)
+```
+
+```{python}
+#| label: tab-total
+proche_total = mo.stations_proches_total(stations_ens)
+series_t = mo.series_groupes(prix_ht["Gazole"], couts, "Gazole", stations_ens, proche_total)
+modeles_t = {nom: mo.modele_asymetrique(s, 7) for nom, s in series_t.items()}
+mo.ecarts_groupes(modeles_t["écart"])
+```
+
+```{python}
+#| label: fig-total
+#| fig-cap: "Gazole : transmission cumulée des hausses et des baisses du coût, stations avec et sans Total à moins de 3 km."
+mo.graphique_groupes(modeles_t["non"], modeles_t["oui"], 7, ("sans Total", "avec Total"),
+                     "Transmission du coût selon la présence d'une station Total à moins de 3 km");
+```
+
+La présence d'une Total est souvent associée à une zone plus dense, avec davantage de concurrents : l'écart mesuré mêle l'effet de la Total et celui de la concurrence locale en général.
+
+### Niveau de vie de la commune
+
+Les stations des communes aisées profitent-elles des variations du coût, en répercutant les hausses plus vite et les baisses plus lentement, parce que leurs clients sont moins sensibles au prix ?
+
+Chaque station est rattachée à sa commune, dont on connaît le revenu médian (Insee, Filosofi 2021), par la fonction `construire_table_geo` de `geo.py`. Les stations, hors TotalEnergies et hors autoroute, sont classées en tiers selon ce revenu ; on compare le tiers le plus aisé ($R_i = 1$) au tiers le plus modeste ($R_i = 0$), le tiers du milieu étant écarté. Le modèle est le même que ci-dessus, $T_i$ étant remplacé par $R_i$ : $\theta_k^{\pm}$ est l'écart de transmission des stations des communes aisées. $\Theta^{+}_k > 0$ (hausses plus rapides) et $\Theta^{-}_k < 0$ (baisses plus lentes) indiqueraient que ces stations profitent de la situation.
+
+```{python}
+#| label: geo
+from carburants.geo import construire_table_geo
+
+geo = construire_table_geo(prix.DOSSIER_INTERMEDIAIRE / "stations_enseignes_2022.parquet",
+                           prix.DOSSIER_INTERMEDIAIRE / "stations_geo_2022.parquet")
+geo.head()
+```
+
+```{python}
+#| label: tab-revenu
+aise = mo.groupes_revenu(geo)
+series_r = mo.series_groupes(prix_ht["Gazole"], couts, "Gazole", stations_ens, aise)
+modeles_r = {nom: mo.modele_asymetrique(s, 7) for nom, s in series_r.items()}
+mo.ecarts_groupes(modeles_r["écart"])
+```
+
+```{python}
+#| label: fig-revenu
+#| fig-cap: "Gazole : transmission cumulée des hausses et des baisses du coût, stations des communes du tiers le plus modeste et du tiers le plus aisé."
+mo.graphique_groupes(modeles_r["non"], modeles_r["oui"], 7, ("communes modestes", "communes aisées"),
+                     "Transmission du coût selon le revenu médian de la commune");
+```
+
+Les communes aisées sont souvent urbaines et denses, avec davantage de concurrents : l'écart mesuré mêle le niveau de vie et la concurrence locale.
+
