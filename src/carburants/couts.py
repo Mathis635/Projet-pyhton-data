@@ -126,6 +126,7 @@ def construire_table_couts(
     colonnes_finales = [
         "jour",
         "carburant",
+        "eurusd",
         "cout_eur_l",
         "accise_eur_l",
         "remise_etat_ttc",
