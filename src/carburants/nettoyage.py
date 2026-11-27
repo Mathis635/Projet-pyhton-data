@@ -14,8 +14,12 @@ def filtrer_releves(prix, stations, ecart_max=0.4):
     prix = prix[prix["prix_ttc"].between(0.5, 3)]
     journal["prix entre 0,5 et 3 €/L"] = len(prix)
 
-    mediane = prix.groupby([prix["date_maj"].dt.floor("D"), "carburant"])["prix_ttc"].transform("median")
-    prix = prix[(prix["prix_ttc"] / mediane - 1).abs() <= ecart_max]
+    prix["jour"] = prix["date_maj"].dt.floor("D")
+    mediane = prix.groupby(["jour", "carburant"])["prix_ttc"].median().rename("mediane").reset_index()
+    prix = prix.merge(mediane, on=["jour", "carburant"])
+    ecart = (prix["prix_ttc"] / prix["mediane"] - 1).abs()
+    prix = prix[ecart <= ecart_max]
+    prix = prix.drop(columns=["jour", "mediane"])
     journal[f"écart à la médiane du jour d'au plus {ecart_max:.0%}"] = len(prix)
 
     actives = stations.loc[stations["active"], "id_station"].astype(str)
@@ -26,11 +30,16 @@ def filtrer_releves(prix, stations, ecart_max=0.4):
 
 def prix_journaliers(prix):
     """Panel station x carburant x jour : dernier prix de la journée, reporté sur les jours sans changement."""
-    prix = prix.assign(jour=prix["date_maj"].dt.floor("D")).sort_values("date_maj")
+    prix = prix.sort_values("date_maj")
+    prix["jour"] = prix["date_maj"].dt.floor("D")
     large = prix.pivot_table(index="jour", columns=["id_station", "carburant"], values="prix_ttc", aggfunc="last")
     large = large.asfreq("D")
-    large = large.ffill().where(large.bfill().notna())
-    return large.stack(["id_station", "carburant"]).dropna().rename("prix_ttc").reset_index()
+    prix_reporte = large.ffill()
+    releve_a_venir = large.bfill()
+    prix_reporte[releve_a_venir.isna()] = None
+    panel = prix_reporte.stack(["id_station", "carburant"]).dropna()
+    panel = panel.rename("prix_ttc").reset_index()
+    return panel
 
 
 def ajouter_variations(panel):

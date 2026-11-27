@@ -77,8 +77,10 @@ def serie_prix_moyen(panel):
 
 def serie_dispersion(panel):
     """Écart D9 - D1 des prix entre stations, moyenne sur 7 jours, un panneau par carburant."""
-    q = panel.groupby(["jour", "carburant"])["prix_ttc"].quantile([0.1, 0.9]).unstack()
-    ecart = ((q[0.9] - q[0.1]) * 100).unstack().rolling(7, center=True, min_periods=1).mean()
+    g = panel.groupby(["jour", "carburant"])["prix_ttc"]
+    ecart = (g.quantile(0.9) - g.quantile(0.1)) * 100
+    ecart = ecart.unstack()
+    ecart = ecart.rolling(7, center=True, min_periods=1).mean()
     fig, axes = plt.subplots(2, 2, figsize=(11, 6), sharex=True, sharey=True)
     for ax, carb in zip(axes.flat, CARBURANTS_ROUTIERS):
         marquer_remises(ax)
@@ -128,8 +130,10 @@ def boites_type_enseigne(panel, stations, carburant="Gazole"):
 def carte_prix(panel, stations, carburant="Gazole"):
     """Carte du prix moyen annuel de chaque station ; du vert (moins cher) au rouge (plus cher)."""
     moy = moyennes_par_station(panel, carburant).rename("prix")
-    st = metropole(stations.assign(id_station=stations["id_station"].astype(str))
-                   .join(moy, on="id_station").dropna(subset=["prix"]))
+    st = stations.copy()
+    st["id_station"] = st["id_station"].astype(str)
+    st = st.join(moy, on="id_station")
+    st = metropole(st.dropna(subset=["prix"]))
     bas, haut = st["prix"].quantile([0.05, 0.95])
     fig, ax = plt.subplots(figsize=(8, 8))
     nuage = ax.scatter(st["longitude"], st["latitude"], c=st["prix"], cmap="RdYlGn_r",

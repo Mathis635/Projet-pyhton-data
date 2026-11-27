@@ -1,5 +1,4 @@
 import json
-import re
 
 import numpy as np
 import pandas as pd
@@ -45,10 +44,17 @@ def enseigne(texte):
     """Ramène un libellé OSM (« E.Leclerc ») à une enseigne (« Leclerc »), ou None."""
     if not isinstance(texte, str):
         return None
-    mots = " " + re.sub(r"\W+", " ", texte.lower()).strip() + " "
+    lettres = ""
+    for lettre in texte.lower():
+        if lettre.isalnum() or lettre == "_":
+            lettres += lettre
+        else:
+            lettres += " "
+    mots = " " + " ".join(lettres.split()) + " "
     for nom, variantes in ENSEIGNES.items():
-        if any(f" {v} " in mots for v in variantes):
-            return nom
+        for variante in variantes:
+            if " " + variante + " " in mots:
+                return nom
     return None
 
 
@@ -78,7 +84,9 @@ def charger_osm():
                        tags.get("operator"), tags.get("name"), tags.get("ref:FR:prix-carburants")])
     osm = pd.DataFrame(lignes, columns=["osm_id", "lat", "lon", "brand", "operator", "name", "ref"])
     osm = osm.dropna(subset=["lat", "lon"])
-    osm["enseigne"] = osm["brand"].map(enseigne).fillna(osm["operator"].map(enseigne)).fillna(osm["name"].map(enseigne))
+    osm["enseigne"] = osm["brand"].map(enseigne)
+    osm["enseigne"] = osm["enseigne"].fillna(osm["operator"].map(enseigne))
+    osm["enseigne"] = osm["enseigne"].fillna(osm["name"].map(enseigne))
     osm["type_enseigne"] = osm["enseigne"].map(type_enseigne)
     return osm
 
@@ -112,7 +120,13 @@ def n_concurrents(stations, rayon=5000):
     coords = np.radians(st[["latitude", "longitude"]].to_numpy())
     voisins = BallTree(coords, metric="haversine").query_radius(coords, r=rayon / RAYON_TERRE)
     ens = st["enseigne"].fillna("?").to_numpy()
-    n = [sum(ens[j] != ens[i] or ens[i] == "?" for j in v if j != i) for i, v in enumerate(voisins)]
+    n = []
+    for i in range(len(voisins)):
+        compte = 0
+        for j in voisins[i]:
+            if j != i and (ens[j] != ens[i] or ens[i] == "?"):
+                compte += 1
+        n.append(compte)
     return pd.Series(n, index=st.index).reindex(stations.index)
 
 
